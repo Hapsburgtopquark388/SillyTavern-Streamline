@@ -1,5 +1,5 @@
 import { extension_settings, renderExtensionTemplateAsync } from '../../../extensions.js';
-import { saveSettingsDebounced } from '../../../../script.js';
+import { eventSource, event_types, saveSettingsDebounced } from '../../../../script.js';
 import { promptManager } from '../../../openai.js';
 
 const MODULE_NAME = 'third-party/Streamline';
@@ -98,7 +98,6 @@ const HARD_NEUTRALIZE = {
     hide_cfg_scale: {
         label: 'Disabled — irrelevant for cloud APIs',
         save() {
-            // CFG guidance scale for TC — read the slider value
             const $el = $('#cfg_block_ooba input[type="range"]');
             return $el.length ? parseFloat($el.val()) : null;
         },
@@ -143,7 +142,6 @@ const HARD_NEUTRALIZE = {
             return $el.length ? $el.val() : null;
         },
         apply() {
-            // Context template: select the first option (default) if available
             const $el = $('#context_presets');
             if ($el.length) {
                 const $defaultOpt = $el.find('option').first();
@@ -170,11 +168,28 @@ const SOFT_NEUTRALIZE = {
     hide_nsfw_jailbreak: {
         label: 'Managed by your system prompt',
         save() {
+            // Read from prompt manager data model if available, fall back to textarea
+            if (promptManager) {
+                const nsfwPrompt = promptManager.getPromptById('nsfw');
+                const jbPrompt = promptManager.getPromptById('jailbreak');
+                return {
+                    nsfw: nsfwPrompt ? nsfwPrompt.content : '',
+                    jailbreak: jbPrompt ? jbPrompt.content : '',
+                };
+            }
             const nsfw = $('#nsfw_prompt_quick_edit_textarea').val() || '';
             const jailbreak = $('#jailbreak_prompt_quick_edit_textarea').val() || '';
             return { nsfw, jailbreak };
         },
         apply() {
+            // Write to prompt manager data model + sync textarea
+            if (promptManager) {
+                const nsfwPrompt = promptManager.getPromptById('nsfw');
+                const jbPrompt = promptManager.getPromptById('jailbreak');
+                if (nsfwPrompt) nsfwPrompt.content = '';
+                if (jbPrompt) jbPrompt.content = '';
+                promptManager.saveServiceSettings();
+            }
             const $nsfw = $('#nsfw_prompt_quick_edit_textarea');
             const $jb = $('#jailbreak_prompt_quick_edit_textarea');
             if ($nsfw.length) $nsfw.val('').trigger('input');
@@ -182,6 +197,13 @@ const SOFT_NEUTRALIZE = {
         },
         restore(saved) {
             if (!saved) return;
+            if (promptManager) {
+                const nsfwPrompt = promptManager.getPromptById('nsfw');
+                const jbPrompt = promptManager.getPromptById('jailbreak');
+                if (nsfwPrompt && saved.nsfw) nsfwPrompt.content = saved.nsfw;
+                if (jbPrompt && saved.jailbreak) jbPrompt.content = saved.jailbreak;
+                promptManager.saveServiceSettings();
+            }
             const $nsfw = $('#nsfw_prompt_quick_edit_textarea');
             const $jb = $('#jailbreak_prompt_quick_edit_textarea');
             if ($nsfw.length && saved.nsfw) $nsfw.val(saved.nsfw).trigger('input');
@@ -195,16 +217,19 @@ const SOFT_NEUTRALIZE = {
             return $el.length ? parseFloat($el.val()) : null;
         },
         apply() {
+            // Set value WITHOUT triggering 'input' — ST's input handler on
+            // #talkativeness_slider calls saveCharacterDebounced() which can
+            // throw errors if no character is loaded or image is invalid.
             const $el = $('#talkativeness_slider');
             if ($el.length) {
-                $el.val(1.0).trigger('input');
+                $el.val(1.0);
             }
         },
         restore(saved) {
             if (saved === null || saved === undefined) return;
             const $el = $('#talkativeness_slider');
             if ($el.length) {
-                $el.val(saved).trigger('input');
+                $el.val(saved);
             }
         },
     },
@@ -252,10 +277,6 @@ const ALL_NEUTRALIZE_KEYS = new Set([
 // Phase 2.5 — Prompt Manager Field Toggling
 // =====================================================================
 
-/**
- * Prompt manager fields to DISABLE when Apply Narrative Defaults is used.
- * The user's system prompt handles what these fields were designed for.
- */
 const PM_FIELDS_TO_DISABLE = [
     'charDescription',
     'charPersonality',
@@ -266,9 +287,6 @@ const PM_FIELDS_TO_DISABLE = [
     'jailbreak',
 ];
 
-/**
- * Prompt manager fields to LEAVE ENABLED.
- */
 const PM_FIELDS_TO_KEEP = [
     'main',
     'personaDescription',
@@ -277,19 +295,11 @@ const PM_FIELDS_TO_KEEP = [
     'chatHistory',
 ];
 
-/**
- * Get the prompt manager's active character, if available.
- * @returns {object|null}
- */
 function getPMActiveCharacter() {
     if (!promptManager) return null;
     return promptManager.activeCharacter || null;
 }
 
-/**
- * Read current enabled states for all PM fields we manage.
- * @returns {Object<string, boolean>} Map of identifier → enabled state
- */
 function readPMFieldStates() {
     const character = getPMActiveCharacter();
     if (!character || !promptManager) return {};
@@ -304,10 +314,6 @@ function readPMFieldStates() {
     return states;
 }
 
-/**
- * Set enabled state for specific PM fields.
- * @param {Object<string, boolean>} stateMap Map of identifier → desired enabled state
- */
 function setPMFieldStates(stateMap) {
     const character = getPMActiveCharacter();
     if (!character || !promptManager) return;
@@ -323,28 +329,21 @@ function setPMFieldStates(stateMap) {
 
     if (changed) {
         promptManager.saveServiceSettings();
-        try {
-            promptManager.render();
-        } catch (e) {
-            // Render might fail if prompt manager isn't fully initialized yet
-            console.warn('[Streamline] PM render skipped:', e.message);
-        }
+        // Note: We intentionally skip promptManager.render() here.
+        // Calling render() can cascade into ST's character save logic
+        // and trigger errors. saveServiceSettings() is sufficient to persist
+        // the changes — the PM UI will update on next natural render cycle.
     }
 }
 
-/**
- * Soft-disable PM fields: save current states, then disable the target fields.
- */
 function disablePMFields() {
     const settings = extension_settings[SETTINGS_KEY];
 
-    // Save current states before changing
     const currentStates = readPMFieldStates();
     if (Object.keys(currentStates).length > 0) {
         settings._pmPreserved = currentStates;
     }
 
-    // Disable the target fields
     const newStates = {};
     for (const id of PM_FIELDS_TO_DISABLE) {
         newStates[id] = false;
@@ -355,9 +354,6 @@ function disablePMFields() {
     saveSettingsDebounced();
 }
 
-/**
- * Restore PM fields to their previously saved states.
- */
 function restorePMFields() {
     const settings = extension_settings[SETTINGS_KEY];
 
@@ -374,46 +370,21 @@ function restorePMFields() {
 // Phase 2.5 — Neutralize / Restore Logic
 // =====================================================================
 
-/**
- * Preserve the current value of a setting before neutralizing.
- * @param {string} key The toggle key
- */
 function preserveValue(key) {
     const settings = extension_settings[SETTINGS_KEY];
     if (!settings._preserved) settings._preserved = {};
 
-    const hardDef = HARD_NEUTRALIZE[key];
-    const softDef = SOFT_NEUTRALIZE[key];
-    const def = hardDef || softDef;
-
-    if (def) {
-        // Only preserve if we haven't already (don't overwrite a previous backup)
-        if (settings._preserved[key] === undefined) {
-            settings._preserved[key] = def.save();
-        }
+    const def = HARD_NEUTRALIZE[key] || SOFT_NEUTRALIZE[key];
+    if (def && settings._preserved[key] === undefined) {
+        settings._preserved[key] = def.save();
     }
 }
 
-/**
- * Apply neutralization for a specific key.
- * @param {string} key The toggle key
- */
 function neutralize(key) {
-    const hardDef = HARD_NEUTRALIZE[key];
-    const softDef = SOFT_NEUTRALIZE[key];
-
-    if (hardDef) {
-        hardDef.apply();
-    } else if (softDef) {
-        softDef.apply();
-    }
+    const def = HARD_NEUTRALIZE[key] || SOFT_NEUTRALIZE[key];
+    if (def) def.apply();
 }
 
-/**
- * Restore a previously preserved value for a specific key.
- * @param {string} key The toggle key
- * @returns {boolean} Whether a value was actually restored
- */
 function restoreValue(key) {
     const settings = extension_settings[SETTINGS_KEY];
     if (!settings._preserved) return false;
@@ -421,13 +392,8 @@ function restoreValue(key) {
     const saved = settings._preserved[key];
     if (saved === undefined) return false;
 
-    const hardDef = HARD_NEUTRALIZE[key];
-    const softDef = SOFT_NEUTRALIZE[key];
-    const def = hardDef || softDef;
-
-    if (def) {
-        def.restore(saved);
-    }
+    const def = HARD_NEUTRALIZE[key] || SOFT_NEUTRALIZE[key];
+    if (def) def.restore(saved);
 
     delete settings._preserved[key];
     saveSettingsDebounced();
@@ -435,44 +401,47 @@ function restoreValue(key) {
 }
 
 /**
- * Show a brief inline restore notification next to a toggle.
- * @param {string} key The toggle key
+ * Re-apply all active neutralizations.
+ * Called on SETTINGS_LOADED and OAI_PRESET_CHANGED_AFTER to ensure
+ * ST hasn't reverted our neutralized values during its own load/preset cycle.
  */
+function reapplyActiveNeutralizations() {
+    const settings = extension_settings[SETTINGS_KEY];
+    if (!settings) return;
+
+    for (const key of ALL_NEUTRALIZE_KEYS) {
+        if (settings[key]) {
+            neutralize(key);
+        }
+    }
+
+    // Re-apply PM field disabling if it was active
+    if (settings._pmFieldsDisabled) {
+        const newStates = {};
+        for (const id of PM_FIELDS_TO_DISABLE) {
+            newStates[id] = false;
+        }
+        setPMFieldStates(newStates);
+    }
+}
+
 function showRestoreNote(key) {
     const $label = $(`#streamline_${key}`).closest('.checkbox_label');
     const $existing = $label.find('.streamline-restore-note');
-    if ($existing.length) return; // Already showing
+    if ($existing.length) return;
 
     const $note = $('<span class="streamline-restore-note">Restored previous value</span>');
     $label.append($note);
 
-    // Fade out after 3 seconds
     setTimeout(() => {
         $note.fadeOut(500, () => $note.remove());
     }, 3000);
 }
 
-/**
- * Update the "managed" status labels on soft-neutralize toggles.
- */
 function updateManagedLabels() {
     const settings = extension_settings[SETTINGS_KEY];
 
-    // Show "Managed by your system prompt" on active soft-neutralize toggles
-    for (const [key, def] of Object.entries(SOFT_NEUTRALIZE)) {
-        const $label = $(`#streamline_${key}`).closest('.checkbox_label');
-        const $managed = $label.find('.streamline-managed-label');
-        const isActive = !!settings[key];
-
-        if (isActive && $managed.length === 0) {
-            $label.append(`<span class="streamline-managed-label">${def.label}</span>`);
-        } else if (!isActive && $managed.length > 0) {
-            $managed.remove();
-        }
-    }
-
-    // Show labels on hard-neutralize toggles too
-    for (const [key, def] of Object.entries(HARD_NEUTRALIZE)) {
+    for (const [key, def] of Object.entries({ ...SOFT_NEUTRALIZE, ...HARD_NEUTRALIZE })) {
         const $label = $(`#streamline_${key}`).closest('.checkbox_label');
         const $managed = $label.find('.streamline-managed-label');
         const isActive = !!settings[key];
@@ -489,9 +458,6 @@ function updateManagedLabels() {
 // Hide Class Management
 // =====================================================================
 
-/**
- * Apply all current hide states to the <body> element.
- */
 function applyHideClasses() {
     const settings = extension_settings[SETTINGS_KEY];
     for (const [key, className] of Object.entries(TOGGLE_MAP)) {
@@ -503,22 +469,17 @@ function applyHideClasses() {
 // Settings Persistence
 // =====================================================================
 
-/**
- * Load settings from extensionSettings, merging with defaults.
- */
 function loadSettings() {
     if (!extension_settings[SETTINGS_KEY]) {
         extension_settings[SETTINGS_KEY] = {};
     }
 
-    // Fill in any missing defaults
     for (const [key, value] of Object.entries(defaultSettings)) {
         if (extension_settings[SETTINGS_KEY][key] === undefined) {
             extension_settings[SETTINGS_KEY][key] = value;
         }
     }
 
-    // Sync all toggle checkboxes with saved settings
     for (const key of TOGGLE_KEYS) {
         $(`#streamline_${key}`).prop('checked', extension_settings[SETTINGS_KEY][key]);
     }
@@ -527,23 +488,14 @@ function loadSettings() {
     updateManagedLabels();
 }
 
-/**
- * Handle a toggle checkbox change.
- * When toggling ON (hiding): preserve value then neutralize.
- * When toggling OFF (unhiding): restore preserved value.
- * @param {string} key Setting key
- * @param {boolean} value New value (true = hidden)
- */
 function onToggleChange(key, value) {
     extension_settings[SETTINGS_KEY][key] = value;
 
     if (ALL_NEUTRALIZE_KEYS.has(key)) {
         if (value) {
-            // Hiding — preserve and neutralize
             preserveValue(key);
             neutralize(key);
         } else {
-            // Unhiding — restore
             const restored = restoreValue(key);
             if (restored) {
                 showRestoreNote(key);
@@ -556,15 +508,10 @@ function onToggleChange(key, value) {
     saveSettingsDebounced();
 }
 
-/**
- * Set all toggle checkboxes to a given value.
- * @param {boolean} value
- */
 function setAllToggles(value) {
     const settings = extension_settings[SETTINGS_KEY];
 
     if (value) {
-        // Enabling all hides — preserve all neutralizable values first
         for (const key of ALL_NEUTRALIZE_KEYS) {
             preserveValue(key);
         }
@@ -576,12 +523,10 @@ function setAllToggles(value) {
     }
 
     if (value) {
-        // Apply all neutralizations
         for (const key of ALL_NEUTRALIZE_KEYS) {
             neutralize(key);
         }
     } else {
-        // Restore all preserved values
         for (const key of ALL_NEUTRALIZE_KEYS) {
             restoreValue(key);
         }
@@ -593,38 +538,93 @@ function setAllToggles(value) {
 }
 
 // =====================================================================
-// System Prompt Shortcut
+// System Prompt Shortcut — uses promptManager data model
 // =====================================================================
 
 /**
- * Sync Streamline's system prompt textarea with ST's main prompt quick-edit.
+ * Read the main system prompt content from the prompt manager's data model.
+ * Falls back to the quick-edit textarea if promptManager isn't ready.
+ * @returns {string}
  */
-function initSystemPromptShortcut() {
-    const $streamlinePrompt = $('#streamline_system_prompt');
-    const sourceSelector = '#main_prompt_quick_edit_textarea';
-
-    function syncFromST() {
-        const $source = $(sourceSelector);
-        if ($source.length) {
-            $streamlinePrompt.val($source.val());
+function readMainPromptContent() {
+    if (promptManager) {
+        const mainPrompt = promptManager.getPromptById('main');
+        if (mainPrompt) {
+            return mainPrompt.content || '';
         }
     }
+    // Fallback: read from textarea if PM not initialized yet
+    const $textarea = $('#main_prompt_quick_edit_textarea');
+    return $textarea.length ? ($textarea.val() || '') : '';
+}
 
-    $streamlinePrompt.on('input', function () {
-        const $source = $(sourceSelector);
-        if ($source.length) {
-            $source.val(this.value).trigger('input');
+/**
+ * Write content to the main system prompt via the prompt manager's data model.
+ * Also syncs the quick-edit textarea if it exists.
+ * @param {string} content
+ */
+function writeMainPromptContent(content) {
+    if (promptManager) {
+        const mainPrompt = promptManager.getPromptById('main');
+        if (mainPrompt) {
+            mainPrompt.content = content;
+            promptManager.saveServiceSettings();
+            // Sync the quick-edit textarea if it's rendered
+            const $textarea = $('#main_prompt_quick_edit_textarea');
+            if ($textarea.length) {
+                $textarea.val(content);
+            }
+            return;
         }
+    }
+    // Fallback: write to textarea directly
+    const $textarea = $('#main_prompt_quick_edit_textarea');
+    if ($textarea.length) {
+        $textarea.val(content).trigger('input');
+    }
+}
+
+/**
+ * Sync Streamline's prompt textarea FROM the prompt manager.
+ */
+function syncSystemPromptFromPM() {
+    const content = readMainPromptContent();
+    $('#streamline_system_prompt').val(content);
+}
+
+function initSystemPromptShortcut() {
+    const $streamlinePrompt = $('#streamline_system_prompt');
+
+    // When user types in Streamline's field, push to PM data model
+    $streamlinePrompt.on('input', function () {
+        writeMainPromptContent(this.value);
     });
 
-    $(document).on('input', sourceSelector, function () {
+    // When ST's quick-edit textarea changes (user edited it directly),
+    // pull into our field
+    $(document).on('input', '#main_prompt_quick_edit_textarea', function () {
         $streamlinePrompt.val(this.value);
     });
 
-    setTimeout(syncFromST, 1000);
-
+    // Sync when the Streamline drawer is opened
     $(document).on('click', '#streamline_settings .inline-drawer-toggle', function () {
-        setTimeout(syncFromST, 200);
+        // Small delay to let the drawer animation complete
+        setTimeout(syncSystemPromptFromPM, 100);
+    });
+
+    // Event-driven sync: re-sync when chat changes (different character = different prompt)
+    eventSource.on(event_types.CHAT_CHANGED, () => {
+        syncSystemPromptFromPM();
+    });
+
+    // Event-driven sync: re-sync when settings are fully loaded
+    eventSource.on(event_types.SETTINGS_LOADED, () => {
+        syncSystemPromptFromPM();
+    });
+
+    // Event-driven sync: re-sync when OAI preset changes (may replace prompt content)
+    eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, () => {
+        syncSystemPromptFromPM();
     });
 }
 
@@ -634,28 +634,20 @@ function initSystemPromptShortcut() {
 
 function readSTTemperature() {
     const $slider = $('#temp_openai');
-    if ($slider.length) {
-        return parseFloat($slider.val()) || 1.0;
-    }
-    return 1.0;
+    return $slider.length ? (parseFloat($slider.val()) || 1.0) : 1.0;
 }
 
 function writeSTTemperature(value) {
     const $slider = $('#temp_openai');
     const $counter = $('#temp_counter_openai');
-    if ($slider.length) {
-        $slider.val(value).trigger('input');
-    }
-    if ($counter.length) {
-        $counter.val(value).trigger('input');
-    }
+    if ($slider.length) $slider.val(value).trigger('input');
+    if ($counter.length) $counter.val(value).trigger('input');
 }
 
 function updateCreativityHighlight(value) {
     const valStr = String(value);
     $('#streamline_creativity_presets .streamline-preset-btn').each(function () {
-        const btnVal = $(this).data('value').toString();
-        $(this).toggleClass('active', btnVal === valStr);
+        $(this).toggleClass('active', $(this).data('value').toString() === valStr);
     });
 }
 
@@ -695,11 +687,12 @@ function initCreativityControls() {
         $('#streamline_creativity_advanced').toggle();
     });
 
-    $(document).on('input', '#temp_openai, #temp_counter_openai', function () {
-        syncCreativityFromST();
-    });
+    // Bidirectional sync when ST's slider changes externally
+    $(document).on('input', '#temp_openai, #temp_counter_openai', syncCreativityFromST);
 
-    setTimeout(syncCreativityFromST, 1000);
+    // Event-driven sync instead of setTimeout
+    eventSource.on(event_types.SETTINGS_LOADED, syncCreativityFromST);
+    eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, syncCreativityFromST);
 }
 
 // =====================================================================
@@ -708,24 +701,18 @@ function initCreativityControls() {
 
 function readSTMaxTokens() {
     const $input = $('#openai_max_tokens');
-    if ($input.length) {
-        return parseInt($input.val()) || 600;
-    }
-    return 600;
+    return $input.length ? (parseInt($input.val()) || 600) : 600;
 }
 
 function writeSTMaxTokens(value) {
     const $input = $('#openai_max_tokens');
-    if ($input.length) {
-        $input.val(value).trigger('input');
-    }
+    if ($input.length) $input.val(value).trigger('input');
 }
 
 function updateResponseLengthHighlight(value) {
     const valStr = String(value);
     $('#streamline_response_length_presets .streamline-preset-btn').each(function () {
-        const btnVal = $(this).data('value').toString();
-        $(this).toggleClass('active', btnVal === valStr);
+        $(this).toggleClass('active', $(this).data('value').toString() === valStr);
     });
 }
 
@@ -755,11 +742,11 @@ function initResponseLengthControls() {
         $('#streamline_response_length_advanced').toggle();
     });
 
-    $(document).on('input', '#openai_max_tokens', function () {
-        syncResponseLengthFromST();
-    });
+    $(document).on('input', '#openai_max_tokens', syncResponseLengthFromST);
 
-    setTimeout(syncResponseLengthFromST, 1000);
+    // Event-driven sync
+    eventSource.on(event_types.SETTINGS_LOADED, syncResponseLengthFromST);
+    eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, syncResponseLengthFromST);
 }
 
 // =====================================================================
@@ -768,10 +755,7 @@ function initResponseLengthControls() {
 
 function readSTContextSize() {
     const $slider = $('#openai_max_context');
-    if ($slider.length) {
-        return parseInt($slider.val()) || 4096;
-    }
-    return 4096;
+    return $slider.length ? (parseInt($slider.val()) || 4096) : 4096;
 }
 
 function writeSTContextSize(value) {
@@ -792,15 +776,15 @@ function writeSTContextSize(value) {
 
 function updateContextDisplay() {
     const size = readSTContextSize();
-    const displayText = size >= 1000 ? `${(size / 1000).toFixed(size % 1000 === 0 ? 0 : 1)}k` : String(size);
+    const displayText = size >= 1000
+        ? `${(size / 1000).toFixed(size % 1000 === 0 ? 0 : 1)}k`
+        : String(size);
     $('#streamline_context_display').text(displayText);
     $('#streamline_context_value').val(size);
 }
 
 function initContextControls() {
-    $('#streamline_context_auto').on('click', function () {
-        updateContextDisplay();
-    });
+    $('#streamline_context_auto').on('click', updateContextDisplay);
 
     $('#streamline_context_apply').on('click', function () {
         const value = parseInt($('#streamline_context_value').val());
@@ -814,11 +798,11 @@ function initContextControls() {
         $('#streamline_context_advanced').toggle();
     });
 
-    $(document).on('input', '#openai_max_context, #openai_max_context_counter', function () {
-        updateContextDisplay();
-    });
+    $(document).on('input', '#openai_max_context, #openai_max_context_counter', updateContextDisplay);
 
-    setTimeout(updateContextDisplay, 1000);
+    // Event-driven sync
+    eventSource.on(event_types.SETTINGS_LOADED, updateContextDisplay);
+    eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, updateContextDisplay);
 }
 
 // =====================================================================
@@ -828,9 +812,7 @@ function initContextControls() {
 function ensureStreamingDefault() {
     const settings = extension_settings[SETTINGS_KEY];
 
-    if (settings._streamingDefaultApplied) {
-        return;
-    }
+    if (settings._streamingDefaultApplied) return;
 
     const $streamToggle = $('#stream_toggle');
     if ($streamToggle.length && !$streamToggle.prop('checked')) {
@@ -861,21 +843,10 @@ jQuery(async function () {
     }
 
     // Quick action: Apply Narrative Defaults
-    // — Enable all hides
-    // — Hard-neutralize all hard targets
-    // — Soft-neutralize all soft targets
-    // — Soft-disable bloat PM fields
-    // — Enable streaming
     $('#streamline_apply_narrative_defaults').on('click', () => {
         setAllToggles(true);
+        disablePMFields();
 
-        // Soft-disable prompt manager fields
-        // (delay slightly to ensure prompt manager is ready)
-        setTimeout(() => {
-            disablePMFields();
-        }, 500);
-
-        // Ensure streaming is on
         const $streamToggle = $('#stream_toggle');
         if ($streamToggle.length && !$streamToggle.prop('checked')) {
             $streamToggle.prop('checked', true).trigger('input');
@@ -883,50 +854,50 @@ jQuery(async function () {
     });
 
     // Quick action: Reset All
-    // — Disable all hides
-    // — Restore all preserved values
-    // — Restore PM field toggle states
-    // — Unhide everything
     $('#streamline_reset_all').on('click', () => {
         setAllToggles(false);
-
-        // Restore prompt manager fields
         restorePMFields();
     });
 
-    // Load saved settings and apply hide classes
+    // Load saved settings and apply hide classes immediately
+    // (CSS classes don't depend on ST's settings being loaded)
     loadSettings();
 
-    // Re-apply neutralizations for settings that are still hidden
-    // (in case ST re-loaded and reset the underlying values)
-    setTimeout(() => {
-        const settings = extension_settings[SETTINGS_KEY];
-        for (const key of ALL_NEUTRALIZE_KEYS) {
-            if (settings[key]) {
-                neutralize(key);
-            }
-        }
-
-        // Re-apply PM field disabling if it was active
-        if (settings._pmFieldsDisabled) {
-            const newStates = {};
-            for (const id of PM_FIELDS_TO_DISABLE) {
-                newStates[id] = false;
-            }
-            setPMFieldStates(newStates);
-        }
-    }, 2000);
-
-    // Initialize Phase 2 features
+    // Initialize all simplified controls and system prompt shortcut
+    // (these register event listeners that will fire when ST is ready)
     initSystemPromptShortcut();
     initCreativityControls();
     initResponseLengthControls();
     initContextControls();
 
-    // Apply streaming default on first use
-    setTimeout(ensureStreamingDefault, 2000);
+    // ---- Event-driven hooks (replace all setTimeout hacks) ----
 
-    console.log('[Streamline] Extension loaded (Phase 2.5).');
+    // SETTINGS_LOADED: ST has finished loading all settings.
+    // Re-apply neutralizations that may have been overwritten by ST's load.
+    eventSource.on(event_types.SETTINGS_LOADED, () => {
+        console.log('[Streamline] SETTINGS_LOADED — re-applying active neutralizations');
+        reapplyActiveNeutralizations();
+    });
+
+    // OAI_PRESET_CHANGED_AFTER: A preset was loaded, which may have
+    // re-enabled instruct mode, changed context template, etc.
+    eventSource.on(event_types.OAI_PRESET_CHANGED_AFTER, () => {
+        console.log('[Streamline] OAI_PRESET_CHANGED_AFTER — re-applying active neutralizations');
+        reapplyActiveNeutralizations();
+    });
+
+    // APP_READY: The app is fully initialized. Apply one-time defaults.
+    eventSource.on(event_types.APP_READY, () => {
+        console.log('[Streamline] APP_READY — applying one-time defaults');
+        ensureStreamingDefault();
+        // Do an initial sync of simplified controls now that DOM is fully ready
+        syncCreativityFromST();
+        syncResponseLengthFromST();
+        updateContextDisplay();
+        syncSystemPromptFromPM();
+    });
+
+    console.log('[Streamline] Extension initialized, waiting for ST events.');
 });
 
 export { MODULE_NAME };
