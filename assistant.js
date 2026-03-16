@@ -21,6 +21,7 @@ const ASSISTANT_SYSTEM_PROMPT = `You are the Streamline Assistant, a helpful AI 
 - You are running inside SillyTavern right now, using the user's connected API
 - Streamline is an extension that simplifies ST by hiding legacy bloat and providing clean controls
 - You have access to information about the user's current setup (installed extensions, API connection, settings)
+- If web search is listed as enabled in your context, you have access to it — use it when users ask about current info, recent updates, or things beyond your training data
 
 ## How to help:
 - Explain what ST settings and toggles do in plain language
@@ -33,7 +34,8 @@ const ASSISTANT_SYSTEM_PROMPT = `You are the Streamline Assistant, a helpful AI 
 - Be concise and direct — users want answers, not essays
 - Use bullet points for multi-step instructions
 - If you don't know something specific, say so rather than guessing
-- You can help with general RP questions too, but your expertise is ST configuration`;
+- You can help with general RP questions too, but your expertise is ST configuration
+- Keep formatting tight — avoid excessive blank lines between sections. Use single line breaks, not double.`;
 
 // =====================================================================
 // Context Gathering
@@ -45,13 +47,17 @@ const ASSISTANT_SYSTEM_PROMPT = `You are the Streamline Assistant, a helpful AI 
 function gatherContext() {
     const parts = [];
 
-    // 1. Current API connection
+    // 1. Current API connection + enabled features
     try {
         const ctx = getContext();
         const settings = ctx.chatCompletionSettings;
         const source = settings?.chat_completion_source || 'unknown';
         const model = getChatCompletionModel() || 'unknown';
-        parts.push(`## Current API Connection\n- Source: ${source}\n- Model: ${model}`);
+        const features = [];
+        if (settings?.enable_web_search) features.push('Web Search');
+        if (settings?.show_thoughts) features.push('Show Thoughts/Reasoning');
+        const featureStr = features.length > 0 ? `\n- Enabled features: ${features.join(', ')}` : '';
+        parts.push(`## Current API Connection\n- Source: ${source}\n- Model: ${model}${featureStr}`);
     } catch {
         parts.push('## Current API Connection\n- Unable to detect');
     }
@@ -164,6 +170,17 @@ async function sendToAPI(messages, signal, onChunk) {
         temperature: 0.7,
         type: 'quiet', // 'quiet' type doesn't affect the main chat
     };
+
+    // Pass through API features the user has enabled in ST settings
+    if (settings?.enable_web_search) {
+        requestData.enable_web_search = true;
+    }
+    if (settings?.show_thoughts) {
+        requestData.include_reasoning = true;
+    }
+    if (settings?.reasoning_effort) {
+        requestData.reasoning_effort = settings.reasoning_effort;
+    }
 
     const response = await fetch('/api/backends/chat-completions/generate', {
         method: 'POST',
@@ -394,12 +411,33 @@ async function sendUserMessage() {
 
 function formatResponse(text) {
     // Basic markdown-ish formatting
-    return escapeHtml(text)
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/^- (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
-        .replace(/\n/g, '<br>');
+    let html = escapeHtml(text);
+
+    // Headers: ## Header → bold text
+    html = html.replace(/^#{1,3}\s+(.+)$/gm, '<strong>$1</strong>');
+
+    // Bold and code
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Horizontal rules
+    html = html.replace(/^---+$/gm, '<hr style="border:0;border-top:1px solid var(--SmartThemeBorderColor,#444);margin:4px 0;">');
+
+    // List items: collect consecutive "- " lines into <ul>
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/((?:<li>.*?<\/li>\n?)+)/g, '<ul style="margin:2px 0;padding-left:18px;">$1</ul>');
+
+    // Collapse 3+ newlines → 2, then 2 newlines → single <br> (paragraph break)
+    html = html.replace(/\n{3,}/g, '\n\n');
+    html = html.replace(/\n\n/g, '<br>');
+    // Single newlines within a paragraph → space (not a line break)
+    html = html.replace(/\n/g, ' ');
+
+    // Clean up any <br> right after/before block elements
+    html = html.replace(/<br>\s*(<ul|<\/ul>|<hr)/g, '$1');
+    html = html.replace(/(<\/ul>|<hr[^>]*>)\s*<br>/g, '$1');
+
+    return html;
 }
 
 function escapeHtml(text) {
