@@ -1,0 +1,12 @@
+{
+    "display_name": "Streamline",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Streamline",
+    "version": "0.2.5",
+    "homePage": "https://github.com/RealDoomSlaya/SillyTavern-Streamline",
+    "auto_update": true
+}

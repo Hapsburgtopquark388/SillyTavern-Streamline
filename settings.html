@@ -1,0 +1,222 @@
+<div id="streamline_settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b>Streamline</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+
+            <!-- ========== SYSTEM PROMPT SHORTCUT ========== -->
+            <div class="streamline-section">
+                <small class="streamline-section-header">System Prompt</small>
+                <small class="streamline-hint">Shortcut to your main system prompt. Syncs with the Prompt Manager.</small>
+                <textarea id="streamline_system_prompt" class="text_pole textarea_compact autoSetHeight" rows="6" placeholder="Write your system prompt here..."></textarea>
+            </div>
+
+            <hr>
+
+            <!-- ========== SIMPLIFIED CONTROLS ========== -->
+            <div class="streamline-section">
+                <small class="streamline-section-header">Simplified Controls</small>
+
+                <!-- Creativity (Temperature) -->
+                <div class="streamline-simplified-control">
+                    <small class="streamline-control-label">Creativity (Temperature)</small>
+                    <div class="streamline-preset-buttons" id="streamline_creativity_presets">
+                        <div class="menu_button streamline-preset-btn" data-value="0.5" title="Temperature 0.5 — Focused and consistent">Low</div>
+                        <div class="menu_button streamline-preset-btn" data-value="0.9" title="Temperature 0.9 — Balanced creativity">Medium</div>
+                        <div class="menu_button streamline-preset-btn" data-value="1.2" title="Temperature 1.2 — Creative and varied">High</div>
+                        <div class="menu_button streamline-preset-btn" data-value="1.8" title="Temperature 1.8 — Maximum creativity">Max</div>
+                    </div>
+                    <div class="streamline-advanced-toggle" id="streamline_creativity_advanced_toggle">
+                        <small><i class="fa-solid fa-sliders"></i> Advanced</small>
+                    </div>
+                    <div class="streamline-advanced-content" id="streamline_creativity_advanced" style="display: none;">
+                        <div class="streamline-slider-row">
+                            <input type="range" id="streamline_temp_slider" min="0" max="2" step="0.01" value="1.0">
+                            <input type="number" id="streamline_temp_value" min="0" max="2" step="0.01" value="1.0" class="text_pole streamline-number-input">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Max Response Length -->
+                <div class="streamline-simplified-control">
+                    <small class="streamline-control-label">Max Response Length</small>
+                    <div class="streamline-preset-buttons" id="streamline_response_length_presets">
+                        <div class="menu_button streamline-preset-btn" data-value="200" title="~200 tokens — A few sentences">Short</div>
+                        <div class="menu_button streamline-preset-btn" data-value="600" title="~600 tokens — A solid paragraph">Medium</div>
+                        <div class="menu_button streamline-preset-btn" data-value="1500" title="~1500 tokens — Extended response">Long</div>
+                        <div class="menu_button streamline-preset-btn" data-value="4096" title="4096 tokens — Maximum length">Max</div>
+                    </div>
+                    <div class="streamline-advanced-toggle" id="streamline_response_length_advanced_toggle">
+                        <small><i class="fa-solid fa-sliders"></i> Advanced</small>
+                    </div>
+                    <div class="streamline-advanced-content" id="streamline_response_length_advanced" style="display: none;">
+                        <div class="streamline-slider-row">
+                            <input type="number" id="streamline_max_tokens_value" min="1" max="128000" step="1" value="600" class="text_pole streamline-number-input wide100p">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Context Size -->
+                <div class="streamline-simplified-control">
+                    <small class="streamline-control-label">Context Size</small>
+                    <div class="streamline-context-row">
+                        <span id="streamline_context_display" class="streamline-context-value">Auto</span>
+                        <div class="menu_button streamline-small-btn" id="streamline_context_auto" title="Auto-detect from connected model">Auto</div>
+                    </div>
+                    <div class="streamline-advanced-toggle" id="streamline_context_advanced_toggle">
+                        <small><i class="fa-solid fa-sliders"></i> Override</small>
+                    </div>
+                    <div class="streamline-advanced-content" id="streamline_context_advanced" style="display: none;">
+                        <div class="streamline-slider-row">
+                            <input type="number" id="streamline_context_value" min="512" max="2000000" step="1" value="128000" class="text_pole streamline-number-input wide100p" placeholder="e.g. 128000">
+                            <div class="menu_button streamline-small-btn" id="streamline_context_apply" title="Apply this context size">Apply</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr>
+
+            <!-- ========== PHASE 1 HIDES ========== -->
+            <div class="streamline-section">
+                <small class="streamline-section-header">Hide — Core Cleanup</small>
+
+                <label class="checkbox_label" for="streamline_hide_text_completion" title="Hide the Text Completion API option and its settings. Cloud API users only need Chat Completion.">
+                    <input id="streamline_hide_text_completion" type="checkbox" />
+                    <span>Hide Text Completion</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_advanced_formatting" title="Hide the Advanced Formatting drawer (instruct mode templates, context templates). Irrelevant for cloud APIs.">
+                    <input id="streamline_hide_advanced_formatting" type="checkbox" />
+                    <span>Hide Advanced Formatting</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_authors_note" title="Hide the Author's Note panel. Use lorebook constant entries instead.">
+                    <input id="streamline_hide_authors_note" type="checkbox" />
+                    <span>Hide Author's Note</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_movingui" title="Hide the MovingUI toggle and presets.">
+                    <input id="streamline_hide_movingui" type="checkbox" />
+                    <span>Hide MovingUI</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_autofix_markdown" title="Hide the Auto-fix Markdown checkbox.">
+                    <input id="streamline_hide_autofix_markdown" type="checkbox" />
+                    <span>Hide Auto-fix Markdown</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_advanced_samplers" title="Hide advanced sampler sliders (frequency penalty, presence penalty, top-k, top-p, etc.). Temperature and max response length remain visible.">
+                    <input id="streamline_hide_advanced_samplers" type="checkbox" />
+                    <span>Hide Advanced Samplers</span>
+                </label>
+            </div>
+
+            <hr>
+
+            <!-- ========== PHASE 2 HIDES — HARD NEUTRALIZE ========== -->
+            <div class="streamline-section">
+                <small class="streamline-section-header">Hide &amp; Disable — Technical Cleanup</small>
+                <small class="streamline-hint">These settings are obsolete for cloud CC APIs. When hidden, they are forced off.</small>
+
+                <label class="checkbox_label" for="streamline_hide_context_template" title="Hide and reset Context Template selector. Irrelevant for cloud Chat Completion APIs.">
+                    <input id="streamline_hide_context_template" type="checkbox" />
+                    <span>Hide Context Template</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_instruct_mode" title="Hide and disable Instruct Mode. Irrelevant for cloud Chat Completion APIs.">
+                    <input id="streamline_hide_instruct_mode" type="checkbox" />
+                    <span>Hide Instruct Mode</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_cfg_scale" title="Hide and disable CFG Scale. Irrelevant for most cloud APIs.">
+                    <input id="streamline_hide_cfg_scale" type="checkbox" />
+                    <span>Hide CFG Scale</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_token_padding" title="Hide and zero out Token Padding. Irrelevant for cloud APIs.">
+                    <input id="streamline_hide_token_padding" type="checkbox" />
+                    <span>Hide Token Padding</span>
+                </label>
+            </div>
+
+            <hr>
+
+            <!-- ========== PHASE 2 HIDES — SOFT NEUTRALIZE ========== -->
+            <div class="streamline-section">
+                <small class="streamline-section-header">Hide &amp; Clear — Prompt Managed</small>
+                <small class="streamline-hint">Your system prompt handles these. When hidden, fields are cleared to avoid conflicts.</small>
+
+                <label class="checkbox_label" for="streamline_hide_nsfw_jailbreak" title="Hide and clear NSFW (Auxiliary) and Jailbreak (Post-History Instructions) prompt areas. Your system prompt handles content rules.">
+                    <input id="streamline_hide_nsfw_jailbreak" type="checkbox" />
+                    <span>Hide NSFW / Jailbreak Prompts</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_example_separator" title="Hide and clear the Example Dialogue Separator field.">
+                    <input id="streamline_hide_example_separator" type="checkbox" />
+                    <span>Hide Example Separator</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_chat_start_marker" title="Hide and clear the Chat Start Marker field.">
+                    <input id="streamline_hide_chat_start_marker" type="checkbox" />
+                    <span>Hide Chat Start Marker</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_talkativeness" title="Hide the Talkativeness slider and set to full (1.0). Your system prompt handles NPC behavior.">
+                    <input id="streamline_hide_talkativeness" type="checkbox" />
+                    <span>Hide Talkativeness</span>
+                </label>
+            </div>
+
+            <hr>
+
+            <!-- ========== PHASE 2 HIDES — UI ONLY ========== -->
+            <div class="streamline-section">
+                <small class="streamline-section-header">Hide — UI Declutter</small>
+                <small class="streamline-hint">These are hidden only. No underlying settings are changed.</small>
+
+                <label class="checkbox_label" for="streamline_hide_response_formatting" title="Hide the entire AI Response Formatting tab. Your system prompt handles all formatting.">
+                    <input id="streamline_hide_response_formatting" type="checkbox" />
+                    <span>Hide AI Response Formatting</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_persona_position" title="Hide the Persona Description Position dropdown.">
+                    <input id="streamline_hide_persona_position" type="checkbox" />
+                    <span>Hide Persona Position</span>
+                </label>
+
+                <label class="checkbox_label" for="streamline_hide_group_chat" title="Hide Group Chat management UI. GM Mode means the AI handles all NPCs.">
+                    <input id="streamline_hide_group_chat" type="checkbox" />
+                    <span>Hide Group Chat</span>
+                </label>
+            </div>
+
+            <hr>
+
+            <!-- ========== QUICK ACTIONS ========== -->
+            <div class="streamline-section">
+                <small class="streamline-section-header">Quick Actions</small>
+
+                <div id="streamline_apply_narrative_defaults" class="menu_button menu_button_icon" title="Enable all hides, neutralize all settings, disable bloat PM fields, and enable streaming. All previous values are saved for restore.">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Apply Narrative Defaults</span>
+                </div>
+
+                <div id="streamline_reset_all" class="menu_button menu_button_icon" title="Restore all original values, re-enable all PM fields, and unhide everything.">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>Reset All</span>
+                </div>
+
+                <small class="streamline-hint" style="margin-top: 4px;">
+                    <i class="fa-solid fa-circle-info"></i>
+                    Apply Narrative Defaults stores all previous values. Reset All restores them.
+                    Prompt Manager fields disabled: Char Description, Char Personality, Scenario,
+                    Enhance Definitions, Auxiliary, Chat Examples, Post-History Instructions.
+                    Left enabled: Main Prompt, Persona, World Info, Chat History.
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
