@@ -61,12 +61,17 @@
                 <!-- Context Size -->
                 <div class="streamline-simplified-control">
                     <small class="streamline-control-label">Context Size</small>
-                    <div class="streamline-context-row">
-                        <span id="streamline_context_display" class="streamline-context-value">Auto</span>
-                        <div class="menu_button streamline-small-btn" id="streamline_context_auto" title="Auto-detect from connected model">Auto</div>
+                    <div class="streamline-preset-buttons" id="streamline_context_presets">
+                        <div class="menu_button streamline-preset-btn" data-value="32000" title="32k tokens — Smaller models">32k</div>
+                        <div class="menu_button streamline-preset-btn" data-value="128000" title="128k tokens — Most cloud models (Claude, Gemini, GLM)">128k</div>
+                        <div class="menu_button streamline-preset-btn" data-value="200000" title="200k tokens — Claude extended">200k</div>
+                        <div class="menu_button streamline-preset-btn" data-value="1000000" title="1M tokens — Gemini 2.5 Pro">1M</div>
+                    </div>
+                    <div class="streamline-context-row" style="margin-top: 4px;">
+                        <small>Current: <span id="streamline_context_display" class="streamline-context-value" style="font-weight: 600;">—</span></small>
                     </div>
                     <div class="streamline-advanced-toggle" id="streamline_context_advanced_toggle">
-                        <small><i class="fa-solid fa-sliders"></i> Override</small>
+                        <small><i class="fa-solid fa-sliders"></i> Custom</small>
                     </div>
                     <div class="streamline-advanced-content" id="streamline_context_advanced" style="display: none;">
                         <div class="streamline-slider-row">
@@ -199,7 +204,7 @@
             <div class="streamline-section">
                 <small class="streamline-section-header">Quick Actions</small>
 
-                <div id="streamline_apply_narrative_defaults" class="menu_button menu_button_icon" title="Enable all hides, neutralize all settings, disable bloat PM fields, and enable streaming. All previous values are saved for restore.">
+                <div id="streamline_apply_narrative_defaults" class="menu_button menu_button_icon" title="Enable all hides, neutralize all settings, disable bloat PM fields, enable streaming, and set context to 128k if needed. All previous values are saved for restore.">
                     <i class="fa-solid fa-wand-magic-sparkles"></i>
                     <span>Apply Narrative Defaults</span>
                 </div>
@@ -212,9 +217,9 @@
                 <small class="streamline-hint" style="margin-top: 4px;">
                     <i class="fa-solid fa-circle-info"></i>
                     Apply Narrative Defaults stores all previous values. Reset All restores them.
-                    Prompt Manager fields disabled: Char Description, Char Personality, Scenario,
-                    Enhance Definitions, Auxiliary, Chat Examples, Post-History Instructions.
-                    Left enabled: Main Prompt, Persona, World Info, Chat History.
+                    Context set to 128k if below 4k. Prompt Manager fields disabled: Char Description,
+                    Char Personality, Scenario, Enhance Definitions, Auxiliary, Chat Examples,
+                    Post-History Instructions. Left enabled: Main Prompt, Persona, World Info, Chat History.
                 </small>
             </div>
         </div>

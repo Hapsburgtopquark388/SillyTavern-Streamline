@@ -774,17 +774,37 @@ function writeSTContextSize(value) {
     }
 }
 
+function formatContextSize(size) {
+    if (size >= 1000000) {
+        return `${(size / 1000000).toFixed(size % 1000000 === 0 ? 0 : 1)}M`;
+    }
+    if (size >= 1000) {
+        return `${(size / 1000).toFixed(size % 1000 === 0 ? 0 : 1)}k`;
+    }
+    return String(size);
+}
+
 function updateContextDisplay() {
     const size = readSTContextSize();
-    const displayText = size >= 1000
-        ? `${(size / 1000).toFixed(size % 1000 === 0 ? 0 : 1)}k`
-        : String(size);
-    $('#streamline_context_display').text(displayText);
+    $('#streamline_context_display').text(formatContextSize(size));
     $('#streamline_context_value').val(size);
+    updateContextHighlight(size);
+}
+
+function updateContextHighlight(value) {
+    const valStr = String(value);
+    $('#streamline_context_presets .streamline-preset-btn').each(function () {
+        $(this).toggleClass('active', $(this).data('value').toString() === valStr);
+    });
 }
 
 function initContextControls() {
-    $('#streamline_context_auto').on('click', updateContextDisplay);
+    // Preset buttons
+    $('#streamline_context_presets').on('click', '.streamline-preset-btn', function () {
+        const value = parseInt($(this).data('value'));
+        writeSTContextSize(value);
+        updateContextDisplay();
+    });
 
     $('#streamline_context_apply').on('click', function () {
         const value = parseInt($('#streamline_context_value').val());
@@ -847,9 +867,18 @@ jQuery(async function () {
         setAllToggles(true);
         disablePMFields();
 
+        // Enable streaming
         const $streamToggle = $('#stream_toggle');
         if ($streamToggle.length && !$streamToggle.prop('checked')) {
             $streamToggle.prop('checked', true).trigger('input');
+        }
+
+        // Set context size to 128k if currently at a low default (≤ 4096)
+        // This prevents "Mandatory prompts exceed the context size" errors
+        const currentContext = readSTContextSize();
+        if (currentContext <= 4096) {
+            writeSTContextSize(128000);
+            updateContextDisplay();
         }
     });
 
