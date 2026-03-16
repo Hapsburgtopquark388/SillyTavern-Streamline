@@ -43,10 +43,10 @@
                 <div class="streamline-simplified-control">
                     <small class="streamline-control-label">Max Response Length</small>
                     <div class="streamline-preset-buttons" id="streamline_response_length_presets">
-                        <div class="menu_button streamline-preset-btn" data-value="200" title="~200 tokens — A few sentences">Short</div>
-                        <div class="menu_button streamline-preset-btn" data-value="600" title="~600 tokens — A solid paragraph">Medium</div>
-                        <div class="menu_button streamline-preset-btn" data-value="1500" title="~1500 tokens — Extended response">Long</div>
-                        <div class="menu_button streamline-preset-btn" data-value="4096" title="4096 tokens — Maximum length">Max</div>
+                        <div class="menu_button streamline-preset-btn" data-value="400" title="~400 tokens — A few sentences">Short</div>
+                        <div class="menu_button streamline-preset-btn" data-value="1000" title="~1000 tokens — A solid paragraph or two">Medium</div>
+                        <div class="menu_button streamline-preset-btn" data-value="2500" title="~2500 tokens — Extended response">Long</div>
+                        <div class="menu_button streamline-preset-btn" data-value="8192" title="8192 tokens — Maximum length for most models">Max</div>
                     </div>
                     <div class="streamline-advanced-toggle" id="streamline_response_length_advanced_toggle">
                         <small><i class="fa-solid fa-sliders"></i> Advanced</small>
@@ -70,6 +70,7 @@
                     <div class="streamline-context-row" style="margin-top: 4px;">
                         <small>Current: <span id="streamline_context_display" class="streamline-context-value" style="font-weight: 600;">—</span></small>
                     </div>
+                    <small id="streamline_model_info" class="streamline-hint" style="display: none; margin-top: 2px;"></small>
                     <div class="streamline-advanced-toggle" id="streamline_context_advanced_toggle">
                         <small><i class="fa-solid fa-sliders"></i> Custom</small>
                     </div>

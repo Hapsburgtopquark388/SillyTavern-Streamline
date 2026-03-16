@@ -1,6 +1,6 @@
 import { extension_settings, renderExtensionTemplateAsync } from '../../../extensions.js';
 import { eventSource, event_types, saveSettingsDebounced } from '../../../../script.js';
-import { promptManager } from '../../../openai.js';
+import { promptManager, model_list, getChatCompletionModel } from '../../../openai.js';
 
 const MODULE_NAME = 'third-party/Streamline';
 const SETTINGS_KEY = 'streamline';
@@ -826,6 +826,160 @@ function initContextControls() {
 }
 
 // =====================================================================
+// Model-Aware Auto-Configuration
+// =====================================================================
+
+/**
+ * Fallback context sizes for known model families when model_list
+ * metadata doesn't include context_length. Keyed by partial model ID match.
+ */
+const MODEL_CONTEXT_FALLBACKS = {
+    // Claude family
+    'claude-3-5-sonnet': 200000,
+    'claude-3-5-haiku': 200000,
+    'claude-3-opus': 200000,
+    'claude-3-sonnet': 200000,
+    'claude-3-haiku': 200000,
+    'claude-4': 200000,
+    // Gemini family
+    'gemini-2.5-pro': 1000000,
+    'gemini-2.5-flash': 1000000,
+    'gemini-2.0': 1000000,
+    'gemini-1.5-pro': 1000000,
+    'gemini-1.5-flash': 1000000,
+    // GLM family
+    'glm-5': 128000,
+    'glm-4': 128000,
+    // GPT family
+    'gpt-4o': 128000,
+    'gpt-4-turbo': 128000,
+    'gpt-4-1': 1000000,
+    'o1': 200000,
+    'o3': 200000,
+    'o4-mini': 200000,
+    // DeepSeek
+    'deepseek-chat': 128000,
+    'deepseek-r1': 128000,
+    // Mistral
+    'mistral-large': 128000,
+    'mistral-medium': 32000,
+    // Llama
+    'llama-3.3': 128000,
+    'llama-3.1': 128000,
+    'llama-3': 8000,
+    // Qwen
+    'qwen-2.5': 128000,
+    'qwen-3': 128000,
+};
+
+/**
+ * Detect the context window size for the currently selected model.
+ * Checks model_list metadata first, falls back to known model families.
+ * @returns {number|null} Context size in tokens, or null if unknown
+ */
+function detectModelContextSize() {
+    try {
+        const modelId = getChatCompletionModel();
+        if (!modelId) return null;
+
+        // Check model_list metadata (populated after API connection)
+        if (Array.isArray(model_list) && model_list.length > 0) {
+            const modelInfo = model_list.find(m => m.id === modelId);
+            if (modelInfo) {
+                const ctx = modelInfo.context_length
+                    || modelInfo.context_window
+                    || modelInfo.max_context_length
+                    || modelInfo.max_model_len;
+                if (ctx && ctx > 0) {
+                    console.log(`[Streamline] Detected context size from model_list: ${modelId} → ${ctx}`);
+                    return ctx;
+                }
+            }
+        }
+
+        // Fallback: match against known model families
+        const modelLower = modelId.toLowerCase();
+        for (const [pattern, ctx] of Object.entries(MODEL_CONTEXT_FALLBACKS)) {
+            if (modelLower.includes(pattern.toLowerCase())) {
+                console.log(`[Streamline] Matched context size from fallback: ${modelId} → ${ctx} (pattern: ${pattern})`);
+                return ctx;
+            }
+        }
+
+        console.log(`[Streamline] No context size detected for model: ${modelId}`);
+        return null;
+    } catch (e) {
+        console.warn('[Streamline] Error detecting model context:', e.message);
+        return null;
+    }
+}
+
+/**
+ * Get a human-readable model name for display.
+ * @returns {string|null}
+ */
+function getModelDisplayName() {
+    try {
+        const modelId = getChatCompletionModel();
+        if (!modelId) return null;
+
+        // Check model_list for a friendly name
+        if (Array.isArray(model_list) && model_list.length > 0) {
+            const modelInfo = model_list.find(m => m.id === modelId);
+            if (modelInfo?.name) return modelInfo.name;
+        }
+
+        return modelId;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Auto-apply detected context size to ST's settings.
+ * Only applies if the detected size differs significantly from current.
+ * Shows a notification in the context display area.
+ */
+function autoApplyModelContext() {
+    const detected = detectModelContextSize();
+    if (!detected) return;
+
+    const current = readSTContextSize();
+    const modelName = getModelDisplayName();
+
+    // Only auto-apply if current context is suspiciously low (default preset value)
+    // or if the user hasn't manually set something
+    if (current <= 4096) {
+        writeSTContextSize(detected);
+        updateContextDisplay();
+        console.log(`[Streamline] Auto-set context to ${detected} for ${modelName}`);
+
+        // Show brief notification
+        const $display = $('#streamline_context_display');
+        const originalText = $display.text();
+        $display.text(`${originalText} ✓`);
+        setTimeout(() => updateContextDisplay(), 2000);
+    }
+
+    // Always update the model info display
+    updateModelInfoDisplay(modelName, detected);
+}
+
+/**
+ * Update the model info line in the context section.
+ */
+function updateModelInfoDisplay(modelName, contextSize) {
+    const $info = $('#streamline_model_info');
+    if (modelName && contextSize) {
+        $info.text(`${modelName} — ${formatContextSize(contextSize)} max`).show();
+    } else if (modelName) {
+        $info.text(`${modelName}`).show();
+    } else {
+        $info.hide();
+    }
+}
+
+// =====================================================================
 // Self-Managed Defaults — Streaming
 // =====================================================================
 
@@ -924,6 +1078,22 @@ jQuery(async function () {
         syncResponseLengthFromST();
         updateContextDisplay();
         syncSystemPromptFromPM();
+        // Try to detect model context on startup (model_list may already be populated)
+        autoApplyModelContext();
+    });
+
+    // Model-aware auto-configuration: when user changes model or API source,
+    // detect the new model's context window and auto-apply if needed.
+    eventSource.on(event_types.CHATCOMPLETION_MODEL_CHANGED, (newModel) => {
+        console.log(`[Streamline] Model changed to: ${newModel}`);
+        // Small delay to let model_list update
+        setTimeout(() => autoApplyModelContext(), 500);
+    });
+
+    eventSource.on(event_types.CHATCOMPLETION_SOURCE_CHANGED, (newSource) => {
+        console.log(`[Streamline] CC source changed to: ${newSource}`);
+        // Source change may clear model_list; context will update when model is selected
+        updateModelInfoDisplay(null, null);
     });
 
     console.log('[Streamline] Extension initialized, waiting for ST events.');
